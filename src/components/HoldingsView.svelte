@@ -118,10 +118,10 @@
               {#if pc?.version}<span class="badge">{pc.version}</span>{/if}
             </div>
             {#if pc && pc.lat !== null && pc.lon !== null}
-              <div class="row-sub">📍 {pc.lat}, {pc.lon}</div>
+              <div class="row-sub">📍 {pc.lon}, {pc.lat}</div>
             {/if}
             {#if h.note}<div class="row-sub">{h.note}</div>{/if}
-            <div class="row-meta">取得：{new Date(h.acquiredAt).toLocaleString()}</div>
+            <div class="row-meta">記錄於：{new Date(h.acquiredAt).toLocaleString()}</div>
           </div>
           <div class="row-actions">
             <button class="danger" onclick={() => remove(h.id)}>刪除</button>

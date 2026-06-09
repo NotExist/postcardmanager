@@ -105,12 +105,12 @@
     </label>
     <div class="grid-2">
       <label>
-        緯度
-        <input type="text" inputmode="decimal" bind:value={latStr} placeholder="35.0116" />
-      </label>
-      <label>
         經度
         <input type="text" inputmode="decimal" bind:value={lonStr} placeholder="135.7681" />
+      </label>
+      <label>
+        緯度
+        <input type="text" inputmode="decimal" bind:value={latStr} placeholder="35.0116" />
       </label>
     </div>
     <label>
@@ -127,7 +127,7 @@
         <strong>找到 {dupWarning.length} 筆相似明信片：</strong>
         <ul>
           {#each dupWarning as d (d.id)}
-            <li>{d.name}{d.version ? ` [${d.version}]` : ''} {d.lat !== null && d.lon !== null ? `(${d.lat}, ${d.lon})` : ''}</li>
+            <li>{d.name}{d.version ? ` [${d.version}]` : ''} {d.lat !== null && d.lon !== null ? `(${d.lon}, ${d.lat})` : ''}</li>
           {/each}
         </ul>
         <p>仍要新增？</p>
@@ -152,7 +152,7 @@
         <div class="row-main">
           <div class="row-title">{p.name}{p.version ? ` · ${p.version}` : ''}</div>
           {#if p.lat !== null && p.lon !== null}
-            <div class="row-sub">📍 {p.lat}, {p.lon}</div>
+            <div class="row-sub">📍 {p.lon}, {p.lat}</div>
           {/if}
           {#if p.note}<div class="row-sub">{p.note}</div>{/if}
           <div class="row-meta">id: {p.id.slice(0, 8)}…</div>
