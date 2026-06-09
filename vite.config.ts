@@ -1,11 +1,33 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const base = process.env.BASE_PATH ?? '/';
 
+function gitCommit(): string {
+  try {
+    return execSync('git rev-parse --short=12 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string };
+const buildInfo = {
+  version: pkg.version,
+  commit: process.env.GITHUB_SHA?.slice(0, 12) ?? gitCommit(),
+  builtAt: new Date().toISOString(),
+};
+
 export default defineConfig({
   base,
+  define: {
+    __BUILD_INFO__: JSON.stringify(buildInfo),
+  },
   plugins: [
     svelte(),
     VitePWA({

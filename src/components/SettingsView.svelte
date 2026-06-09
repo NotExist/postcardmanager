@@ -1,6 +1,12 @@
 <script lang="ts">
   import { exportAll, downloadJSON, parseBundleFile, importBundle, type ImportMode } from '../lib/io';
   import { users, postcards, holdings } from '../lib/stores';
+  import { buildInfo, commitUrl } from '../lib/buildInfo';
+
+  const builtAtLocal = (() => {
+    try { return new Date(buildInfo.builtAt).toLocaleString(); }
+    catch { return buildInfo.builtAt; }
+  })();
 
   let importMode: ImportMode = $state('merge');
   let status = $state('');
@@ -64,4 +70,35 @@
   {#if status}
     <p class="status">{status}</p>
   {/if}
+
+  <div class="card">
+    <h3>版本資訊</h3>
+    <dl class="kv">
+      <dt>version</dt>
+      <dd>{buildInfo.version}</dd>
+      <dt>commit</dt>
+      <dd>
+        {#if buildInfo.commit === 'unknown'}
+          <code>unknown</code>
+        {:else}
+          <a href={commitUrl(buildInfo.commit)} target="_blank" rel="noreferrer"><code>{buildInfo.commit}</code></a>
+        {/if}
+      </dd>
+      <dt>built</dt>
+      <dd>{builtAtLocal}</dd>
+    </dl>
+  </div>
 </section>
+
+<style>
+  .kv {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 1rem;
+    margin: 0;
+    font-size: 0.9rem;
+  }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .kv code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
