@@ -13,6 +13,7 @@
   let note = $state('');
   let dupWarning: User[] = $state([]);
   let filter = $state('');
+  let formOpen = $state(false);
 
   const holdingCountByUser = $derived.by(() => {
     const m = new Map<string, number>();
@@ -32,6 +33,7 @@
     displayName = '';
     note = '';
     dupWarning = [];
+    formOpen = false;
   }
 
   async function submit(force = false) {
@@ -61,37 +63,42 @@
 <section>
   <h2>用戶</h2>
 
-  <form onsubmit={(e) => { e.preventDefault(); submit(false); }} class="card">
-    <h3>新增用戶</h3>
-    <label>
-      顯示名 *
-      <input type="text" bind:value={displayName} required placeholder="例：Alice" />
-    </label>
-    <label>
-      備註
-      <textarea bind:value={note} rows="2"></textarea>
-    </label>
+  {#if formOpen}
+    <form onsubmit={(e) => { e.preventDefault(); submit(false); }} class="card">
+      <h3>新增用戶</h3>
+      <label>
+        顯示名 *
+        <input type="text" bind:value={displayName} required placeholder="例：Alice" />
+      </label>
+      <label>
+        備註
+        <textarea bind:value={note} rows="2"></textarea>
+      </label>
 
-    {#if dupWarning.length > 0}
-      <div class="warn">
-        <strong>已有同名用戶 {dupWarning.length} 位：</strong>
-        <ul>
-          {#each dupWarning as d (d.id)}
-            <li>{d.displayName} {d.note ? `(${d.note})` : ''}</li>
-          {/each}
-        </ul>
-        <p>仍要新增？</p>
+      {#if dupWarning.length > 0}
+        <div class="warn">
+          <strong>已有同名用戶 {dupWarning.length} 位：</strong>
+          <ul>
+            {#each dupWarning as d (d.id)}
+              <li>{d.displayName} {d.note ? `(${d.note})` : ''}</li>
+            {/each}
+          </ul>
+          <p>仍要新增？</p>
+          <div class="actions">
+            <button type="button" onclick={() => submit(true)}>強制新增</button>
+            <button type="button" onclick={reset}>取消</button>
+          </div>
+        </div>
+      {:else}
         <div class="actions">
-          <button type="button" onclick={() => submit(true)}>強制新增</button>
+          <button type="submit">新增</button>
           <button type="button" onclick={reset}>取消</button>
         </div>
-      </div>
-    {:else}
-      <div class="actions">
-        <button type="submit">新增</button>
-      </div>
-    {/if}
-  </form>
+      {/if}
+    </form>
+  {:else}
+    <button type="button" class="add-toggle" onclick={() => (formOpen = true)}>+ 新增用戶</button>
+  {/if}
 
   <div class="card">
     <label>
@@ -136,5 +143,11 @@
     color: var(--muted);
     align-self: center;
     padding-left: 0.5rem;
+  }
+  .add-toggle {
+    width: 100%;
+    padding: 0.6rem;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
   }
 </style>

@@ -11,6 +11,7 @@
   let note = $state('');
   let dupWarning: Postcard[] = $state([]);
   let editing: Postcard | null = $state(null);
+  let formOpen = $state(false);
 
   function parseCoord(s: string): number | null {
     const t = s.trim();
@@ -27,6 +28,7 @@
     note = '';
     dupWarning = [];
     editing = null;
+    formOpen = false;
   }
 
   async function submit(force = false) {
@@ -78,6 +80,7 @@
     version = p.version;
     note = p.note;
     dupWarning = [];
+    formOpen = true;
   }
 
   async function remove(p: Postcard) {
@@ -97,54 +100,56 @@
 <section>
   <h2>明信片</h2>
 
-  <form onsubmit={(e) => { e.preventDefault(); submit(false); }} class="card">
-    <h3>{editing ? '編輯' : '新增'}明信片</h3>
-    <label>
-      名稱 *
-      <input type="text" bind:value={name} required placeholder="例：京都鴨川夜景" />
-    </label>
-    <div class="grid-2">
+  {#if formOpen}
+    <form onsubmit={(e) => { e.preventDefault(); submit(false); }} class="card">
+      <h3>{editing ? '編輯' : '新增'}明信片</h3>
       <label>
-        經度
-        <input type="text" inputmode="decimal" bind:value={lonStr} placeholder="135.7681" />
+        名稱 *
+        <input type="text" bind:value={name} required placeholder="例：京都鴨川夜景" />
+      </label>
+      <div class="grid-2">
+        <label>
+          經度
+          <input type="text" inputmode="decimal" bind:value={lonStr} placeholder="135.7681" />
+        </label>
+        <label>
+          緯度
+          <input type="text" inputmode="decimal" bind:value={latStr} placeholder="35.0116" />
+        </label>
+      </div>
+      <label>
+        版本
+        <input type="text" bind:value={version} placeholder="例：v1 / 2024 限定" />
       </label>
       <label>
-        緯度
-        <input type="text" inputmode="decimal" bind:value={latStr} placeholder="35.0116" />
+        備註
+        <textarea bind:value={note} rows="2"></textarea>
       </label>
-    </div>
-    <label>
-      版本
-      <input type="text" bind:value={version} placeholder="例：v1 / 2024 限定" />
-    </label>
-    <label>
-      備註
-      <textarea bind:value={note} rows="2"></textarea>
-    </label>
 
-    {#if dupWarning.length > 0}
-      <div class="warn">
-        <strong>找到 {dupWarning.length} 筆相似明信片：</strong>
-        <ul>
-          {#each dupWarning as d (d.id)}
-            <li>{d.name}{d.version ? ` [${d.version}]` : ''} {d.lat !== null && d.lon !== null ? `(${d.lon}, ${d.lat})` : ''}</li>
-          {/each}
-        </ul>
-        <p>仍要新增？</p>
+      {#if dupWarning.length > 0}
+        <div class="warn">
+          <strong>找到 {dupWarning.length} 筆相似明信片：</strong>
+          <ul>
+            {#each dupWarning as d (d.id)}
+              <li>{d.name}{d.version ? ` [${d.version}]` : ''} {d.lat !== null && d.lon !== null ? `(${d.lon}, ${d.lat})` : ''}</li>
+            {/each}
+          </ul>
+          <p>仍要新增？</p>
+          <div class="actions">
+            <button type="button" onclick={() => submit(true)}>強制新增</button>
+            <button type="button" onclick={reset}>取消</button>
+          </div>
+        </div>
+      {:else}
         <div class="actions">
-          <button type="button" onclick={() => submit(true)}>強制新增</button>
+          <button type="submit">{editing ? '儲存' : '新增'}</button>
           <button type="button" onclick={reset}>取消</button>
         </div>
-      </div>
-    {:else}
-      <div class="actions">
-        <button type="submit">{editing ? '儲存' : '新增'}</button>
-        {#if editing}
-          <button type="button" onclick={reset}>取消</button>
-        {/if}
-      </div>
-    {/if}
-  </form>
+      {/if}
+    </form>
+  {:else}
+    <button type="button" class="add-toggle" onclick={() => (formOpen = true)}>+ 新增明信片</button>
+  {/if}
 
   <div class="list">
     {#each $postcards as p (p.id)}
@@ -167,3 +172,12 @@
     {/each}
   </div>
 </section>
+
+<style>
+  .add-toggle {
+    width: 100%;
+    padding: 0.6rem;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+  }
+</style>
