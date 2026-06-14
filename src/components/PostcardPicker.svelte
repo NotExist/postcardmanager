@@ -27,19 +27,22 @@
     return m;
   });
 
+  const selected = $derived($postcards.find((p) => p.id === selectedId) ?? null);
+
+  // Resolve typed/picked text to a postcard id when it matches exactly.
   $effect(() => {
     const id = displayToId.get(inputValue);
     if (id && id !== selectedId) onSelect(id);
-    else if (!id && selectedId && inputValue.trim() === '') onSelect('');
   });
 
+  // Clear search input only when selectedId transitions from set → empty
+  // (parent reset, user 取消選擇). Avoid touching inputValue during typing,
+  // which would break IME composition.
+  let prevSelectedId = '';
   $effect(() => {
-    if (!selectedId) {
-      if (inputValue !== '') inputValue = '';
-    }
+    if (prevSelectedId && !selectedId) inputValue = '';
+    prevSelectedId = selectedId;
   });
-
-  const selected = $derived($postcards.find((p) => p.id === selectedId) ?? null);
 
   function clear() {
     inputValue = '';
@@ -48,27 +51,6 @@
 </script>
 
 <div class="picker">
-  <label>
-    搜尋明信片（名稱 / 版本）
-    <input
-      type="text"
-      list={listId}
-      bind:value={inputValue}
-      placeholder={available.length === 0 ? '尚無可選明信片' : '輸入關鍵字或從清單選擇'}
-      disabled={available.length === 0}
-      autocomplete="off"
-    />
-  </label>
-  <datalist id={listId}>
-    {#each available as p (p.id)}
-      <option value={displayOf(p)}>{p.note}</option>
-    {/each}
-  </datalist>
-  <div class="row-meta">
-    可選 {available.length} 筆
-    {#if excludeIds.size > 0}（已排除 {excludeIds.size} 筆已持有）{/if}
-  </div>
-
   {#if selected}
     <div class="selected">
       <div class="row-main">
@@ -78,6 +60,27 @@
         {/if}
       </div>
       <button type="button" onclick={clear}>取消選擇</button>
+    </div>
+  {:else}
+    <label>
+      搜尋明信片（名稱 / 版本）
+      <input
+        type="text"
+        list={listId}
+        bind:value={inputValue}
+        placeholder={available.length === 0 ? '尚無可選明信片' : '輸入關鍵字或從清單選擇'}
+        disabled={available.length === 0}
+        autocomplete="off"
+      />
+    </label>
+    <datalist id={listId}>
+      {#each available as p (p.id)}
+        <option value={displayOf(p)}>{p.note}</option>
+      {/each}
+    </datalist>
+    <div class="row-meta">
+      可選 {available.length} 筆
+      {#if excludeIds.size > 0}（已排除 {excludeIds.size} 筆已持有）{/if}
     </div>
   {/if}
 </div>
@@ -92,7 +95,6 @@
     border: 1px solid var(--accent);
     border-radius: 0.375rem;
     padding: 0.5rem 0.75rem;
-    margin-top: 0.5rem;
   }
   .selected .row-main { flex: 1; }
   .selected button { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
