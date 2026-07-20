@@ -133,7 +133,7 @@
       }
     }
 
-    const parts = [`貼入 ${tokens.length} 項`];
+    const parts = [`比對 ${tokens.length} 項`];
     if (added) parts.push(`比對加入 ${added} 筆`);
     if (skipped) parts.push(`略過 ${skipped} 筆（已選/已持有）`);
     if (res.ambiguous.length) parts.push(`${res.ambiguous.length} 筆同名多版待選擇`);

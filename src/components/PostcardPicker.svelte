@@ -39,7 +39,12 @@
   }
 
   $effect(() => {
-    if (!composing) tryCommit(inputValue);
+    if (composing) return;
+    tryCommit(inputValue);
+    // 遇到空白即觸發批次比對（行動版貼上未必觸發 paste 事件，文字如實落入時
+    // 在結尾補一個空白即可觸發；先跑 tryCommit 保護含空白的 display「名稱 · 版本」）。
+    // 注意：組字中不觸發（上方 return）；中文 IME 的空白選字不會落到已 commit 的 value。
+    if (inputValue && /\s/.test(inputValue)) commitBatch();
   });
 
   function handlePaste(e: ClipboardEvent) {
@@ -49,6 +54,16 @@
       e.preventDefault(); // 不進入 input，整批交給 parent 比對
       onPasteTokens(tokens);
     }
+  }
+
+  // 行動版 Chrome 的貼上（長按選單、Gboard 剪貼簿 chip）不一定觸發 paste 事件，
+  // 文字會如實落進 input。此按鈕是手動觸發的解析入口：把當前 input 內容整批比對。
+  // 點按鈕時 IME 組字必然已結束，這裡清 inputValue 不違反上方守則。
+  function commitBatch() {
+    const tokens = inputValue.split(/\s+/).filter(Boolean);
+    inputValue = '';
+    if (tokens.length === 0) return;
+    onPasteTokens(tokens);
   }
 </script>
 
@@ -75,6 +90,12 @@
       <option value={displayOf(p)}>{p.note}</option>
     {/each}
   </datalist>
+  {#if inputValue.trim()}
+    <div class="batch-row">
+      <button type="button" onclick={commitBatch}>比對加入</button>
+      <span class="row-meta">把目前輸入整批比對（輸入含空白時會自動觸發）</span>
+    </div>
+  {/if}
   <div class="row-meta">
     可選 {available.length} 筆
     {#if excludeIds.size > 0}（已排除 {excludeIds.size} 筆已持有/已選）{/if}
@@ -84,5 +105,15 @@
 <style>
   .picker {
     margin-bottom: 0.5rem;
+  }
+  .batch-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.375rem;
+  }
+  .batch-row button {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.85rem;
   }
 </style>
