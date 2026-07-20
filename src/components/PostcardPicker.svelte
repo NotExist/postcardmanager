@@ -1,22 +1,21 @@
 <script lang="ts">
   import { postcards } from '../lib/stores';
-  import type { Postcard } from '../lib/types';
+  import { displayOf } from '../lib/tokenMatch';
 
   interface Props {
-    selectedId: string;
-    onSelect: (id: string) => void;
+    /** 使用者以輸入/清單選中一張明信片（exact display match） */
+    onPick: (id: string) => void;
+    /** 貼入含空白分隔的多個 token（≥2 個），整批交給 parent 比對 */
+    onPasteTokens: (tokens: string[]) => void;
     excludeIds?: Set<string>;
   }
-  let { selectedId, onSelect, excludeIds = new Set() }: Props = $props();
+  let { onPick, onPasteTokens, excludeIds = new Set() }: Props = $props();
 
   let inputValue = $state('');
+  let composing = $state(false);
   const listId = `postcard-picker-${crypto.randomUUID().slice(0, 8)}`;
 
   const available = $derived($postcards.filter((p) => !excludeIds.has(p.id)));
-
-  function displayOf(p: Postcard): string {
-    return p.version ? `${p.name} · ${p.version}` : p.name;
-  }
 
   const displayToId = $derived.by(() => {
     const m = new Map<string, string>();
@@ -27,75 +26,63 @@
     return m;
   });
 
-  const selected = $derived($postcards.find((p) => p.id === selectedId) ?? null);
+  // IME 守則（39aa1b7 教訓）：組字過程中絕不動 inputValue，否則打斷中日文輸入。
+  // 唯一允許清 inputValue 的時機是「exact match 成功 commit、且不在組字中」。
+  // compositionstart→end 之間一律不 commit；compositionend 時再補一次檢查
+  // （Chrome 的 input event 先於 compositionend，effect 可能在 composing=true 時被跳過）。
+  function tryCommit(value: string) {
+    const id = displayToId.get(value.trim());
+    if (id) {
+      onPick(id);
+      inputValue = '';
+    }
+  }
 
-  // Resolve typed/picked text to a postcard id when it matches exactly.
   $effect(() => {
-    const id = displayToId.get(inputValue);
-    if (id && id !== selectedId) onSelect(id);
+    if (!composing) tryCommit(inputValue);
   });
 
-  // Clear search input only when selectedId transitions from set → empty
-  // (parent reset, user 取消選擇). Avoid touching inputValue during typing,
-  // which would break IME composition.
-  let prevSelectedId = '';
-  $effect(() => {
-    if (prevSelectedId && !selectedId) inputValue = '';
-    prevSelectedId = selectedId;
-  });
-
-  function clear() {
-    inputValue = '';
-    onSelect('');
+  function handlePaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData('text') ?? '';
+    const tokens = text.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2) {
+      e.preventDefault(); // 不進入 input，整批交給 parent 比對
+      onPasteTokens(tokens);
+    }
   }
 </script>
 
 <div class="picker">
-  {#if selected}
-    <div class="selected">
-      <div class="row-main">
-        <div class="row-title">已選：{selected.name}{selected.version ? ` · ${selected.version}` : ''}</div>
-        {#if selected.lat !== null && selected.lon !== null}
-          <div class="row-sub">📍 {selected.lon}, {selected.lat}</div>
-        {/if}
-      </div>
-      <button type="button" onclick={clear}>取消選擇</button>
-    </div>
-  {:else}
-    <label>
-      搜尋明信片（名稱 / 版本）
-      <input
-        type="text"
-        list={listId}
-        bind:value={inputValue}
-        placeholder={available.length === 0 ? '尚無可選明信片' : '輸入關鍵字或從清單選擇'}
-        disabled={available.length === 0}
-        autocomplete="off"
-      />
-    </label>
-    <datalist id={listId}>
-      {#each available as p (p.id)}
-        <option value={displayOf(p)}>{p.note}</option>
-      {/each}
-    </datalist>
-    <div class="row-meta">
-      可選 {available.length} 筆
-      {#if excludeIds.size > 0}（已排除 {excludeIds.size} 筆已持有）{/if}
-    </div>
-  {/if}
+  <label>
+    搜尋明信片（名稱 / 版本），或貼入以空白分隔的多個名稱
+    <input
+      type="text"
+      list={listId}
+      bind:value={inputValue}
+      placeholder={available.length === 0 ? '貼入名稱可批次新增' : '輸入關鍵字、從清單選擇，或貼入多個名稱'}
+      autocomplete="off"
+      oncompositionstart={() => (composing = true)}
+      oncompositionend={(e) => {
+        composing = false;
+        inputValue = e.currentTarget.value;
+        tryCommit(inputValue);
+      }}
+      onpaste={handlePaste}
+    />
+  </label>
+  <datalist id={listId}>
+    {#each available as p (p.id)}
+      <option value={displayOf(p)}>{p.note}</option>
+    {/each}
+  </datalist>
+  <div class="row-meta">
+    可選 {available.length} 筆
+    {#if excludeIds.size > 0}（已排除 {excludeIds.size} 筆已持有/已選）{/if}
+  </div>
 </div>
 
 <style>
-  .picker { margin-bottom: 0.5rem; }
-  .selected {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: var(--bg);
-    border: 1px solid var(--accent);
-    border-radius: 0.375rem;
-    padding: 0.5rem 0.75rem;
+  .picker {
+    margin-bottom: 0.5rem;
   }
-  .selected .row-main { flex: 1; }
-  .selected button { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
 </style>
