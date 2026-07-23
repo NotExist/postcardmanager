@@ -13,6 +13,10 @@ function fromLiveQuery<T>(fn: () => Promise<T>, initial: T) {
   });
 }
 
-export const users = fromLiveQuery<User[]>(() => db.users.orderBy('createdAt').toArray(), []);
+// updatedAt 未建 index，個人規模資料直接 JS 排序（新→舊），免 schema 遷移
+export const users = fromLiveQuery<User[]>(
+  () => db.users.toArray().then((a) => a.sort((x, y) => y.updatedAt - x.updatedAt)),
+  [],
+);
 export const postcards = fromLiveQuery<Postcard[]>(() => db.postcards.orderBy('createdAt').toArray(), []);
 export const holdings = fromLiveQuery<Holding[]>(() => db.holdings.orderBy('acquiredAt').toArray(), []);
