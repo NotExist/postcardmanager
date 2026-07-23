@@ -12,6 +12,18 @@
   let dupWarning: Postcard[] = $state([]);
   let editing: Postcard | null = $state(null);
   let formOpen = $state(false);
+  let filter = $state('');
+
+  const filtered = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return $postcards;
+    return $postcards.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.version.toLowerCase().includes(q) ||
+        p.note.toLowerCase().includes(q),
+    );
+  });
 
   function parseCoord(s: string): number | null {
     const t = s.trim();
@@ -151,8 +163,16 @@
     <button type="button" class="add-toggle" onclick={() => (formOpen = true)}>+ 新增明信片</button>
   {/if}
 
+  <div class="card">
+    <label>
+      搜尋（名稱 / 版本 / 備註）
+      <input type="search" bind:value={filter} placeholder="輸入關鍵字過濾" />
+    </label>
+    <div class="row-meta">{filtered.length} / {$postcards.length} 筆</div>
+  </div>
+
   <div class="list">
-    {#each $postcards as p (p.id)}
+    {#each filtered as p (p.id)}
       <div class="row">
         <div class="row-main">
           <div class="row-title">{p.name}{p.version ? ` · ${p.version}` : ''}</div>
@@ -168,7 +188,9 @@
         </div>
       </div>
     {:else}
-      <p class="empty">尚無明信片</p>
+      <p class="empty">
+        {filter.trim() ? '沒有符合的明信片' : '尚無明信片'}
+      </p>
     {/each}
   </div>
 </section>
