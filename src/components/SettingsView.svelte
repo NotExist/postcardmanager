@@ -2,24 +2,36 @@
   import { onMount } from 'svelte';
   import { exportAll, downloadJSON, parseBundleFile, importBundle, type ImportMode } from '../lib/io';
   import { users, postcards, holdings } from '../lib/stores';
-  import { db } from '../lib/db';
+  import { db, withTimeout } from '../lib/db';
   import { buildInfo, commitUrl } from '../lib/buildInfo';
 
-  // 直接對 DB count()（不走 liveQuery/index）：把「DB 打不開」和「DB 是空的」區分開。
+  // 直接對 DB count()（不走 liveQuery/index）：把「DB 打不開/被鎖」和「DB 是空的」區分開。
   // liveQuery store 出錯時會永遠停在 []，畫面上與空資料無法分辨——這裡是診斷的事實來源。
-  let counts: { users: number; postcards: number; holdings: number } | null = $state(null);
-  let countsError = $state('');
+  // 逐 store 各自帶逾時：IndexedDB 鎖按 object store 計，單一 store 被別的視窗鎖住時
+  // 該操作會無限懸掛（不拋錯），逾時是唯一訊號；分開探測才能指出是哪個 store 卡住。
+  let counts: { users: string; postcards: string; holdings: string } | null = $state(null);
+  let countsHint = $state('');
   let persisted: boolean | null = $state(null);
   let storageInfo = $state('');
 
-  async function refreshCounts() {
+  async function probeCount(table: { count(): Promise<number> }): Promise<string> {
     try {
-      countsError = '';
-      const [u, p, h] = await Promise.all([db.users.count(), db.postcards.count(), db.holdings.count()]);
-      counts = { users: u, postcards: p, holdings: h };
+      return String(await withTimeout(table.count(), 4000));
     } catch (err) {
-      counts = null;
-      countsError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      return err instanceof Error && err.message === 'timeout'
+        ? '逾時'
+        : `錯誤：${err instanceof Error ? err.name : String(err)}`;
+    }
+  }
+
+  async function refreshCounts() {
+    counts = null;
+    countsHint = '';
+    const [u, p, h] = await Promise.all([probeCount(db.users), probeCount(db.postcards), probeCount(db.holdings)]);
+    counts = { users: u, postcards: p, holdings: h };
+    if ([u, p, h].some((v) => !/^\d+$/.test(v))) {
+      countsHint =
+        '「逾時」通常表示該 store 被其他視窗/分頁的未完成交易鎖住：請完全關閉本 app 的所有視窗與分頁（含已安裝的 PWA），必要時重啟瀏覽器後再開。資料多半仍在，只是被鎖住讀不到。';
     }
     try {
       if (navigator.storage?.persisted) persisted = await navigator.storage.persisted();
@@ -104,12 +116,12 @@
   <div class="card">
     <h3>資料統計</h3>
     <ul>
-      <li>用戶：{$users.length}（庫內實測 {counts ? counts.users : '—'}）</li>
-      <li>明信片：{$postcards.length}（庫內實測 {counts ? counts.postcards : '—'}）</li>
-      <li>持有關聯：{$holdings.length}（庫內實測 {counts ? counts.holdings : '—'}）</li>
+      <li>用戶：{$users.length}（庫內實測 {counts ? counts.users : '查詢中…'}）</li>
+      <li>明信片：{$postcards.length}（庫內實測 {counts ? counts.postcards : '查詢中…'}）</li>
+      <li>持有關聯：{$holdings.length}（庫內實測 {counts ? counts.holdings : '查詢中…'}）</li>
     </ul>
-    {#if countsError}
-      <p class="count-error">⚠️ 資料庫讀取失敗：{countsError}</p>
+    {#if countsHint}
+      <p class="count-error">⚠️ {countsHint}</p>
     {/if}
     <div class="stats-meta">
       <button type="button" onclick={refreshCounts}>重新計數</button>

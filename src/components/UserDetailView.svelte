@@ -1,6 +1,6 @@
 <script lang="ts">
   import { users, postcards, holdings } from '../lib/stores';
-  import { db, uid, now } from '../lib/db';
+  import { db, uid, now, withTimeout } from '../lib/db';
   import { findHoldingDuplicates, findUserDuplicates, type HoldingDupHit } from '../lib/dupCheck';
   import { matchPostcardTokens, displayOf } from '../lib/tokenMatch';
   import PostcardPicker from './PostcardPicker.svelte';
@@ -76,14 +76,21 @@
     }
 
     try {
-      await db.users.update(user.id, {
-        displayName: trimmed,
-        note: editNote.trim(),
-        updatedAt: now(),
-      });
+      // 逾時偵測：store 被其他視窗鎖住時寫入會無限懸掛（不拋錯），user 只會覺得「按了沒反應」
+      await withTimeout(
+        db.users.update(user.id, {
+          displayName: trimmed,
+          note: editNote.trim(),
+          updatedAt: now(),
+        }),
+        5000,
+      );
     } catch (err) {
-      // 寫入失敗不能靜默（IndexedDB 故障/配額時 user 會以為「按了沒反應」）
-      alert(`儲存失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+      alert(
+        err instanceof Error && err.message === 'timeout'
+          ? '儲存逾時：資料庫可能被本 app 的其他視窗/分頁鎖住。請關閉其他視窗後再試（此次變更可能稍後仍會生效）。'
+          : `儲存失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
+      );
       return;
     }
     editing = false;
@@ -201,21 +208,28 @@
     const ts = now();
     const note = holdingNote.trim();
     try {
-      await db.transaction('rw', db.holdings, db.users, async () => {
-        await db.holdings.bulkAdd(
-          selectedIds.map((pid) => ({
-            id: uid(),
-            userId: user.id,
-            postcardId: pid,
-            acquiredAt: ts,
-            note,
-          })),
-        );
-        // 動過持有也算「更新用戶」：bump updatedAt 讓列表排序（新→舊）反映
-        await db.users.update(user.id, { updatedAt: ts });
-      });
+      await withTimeout(
+        db.transaction('rw', db.holdings, db.users, async () => {
+          await db.holdings.bulkAdd(
+            selectedIds.map((pid) => ({
+              id: uid(),
+              userId: user.id,
+              postcardId: pid,
+              acquiredAt: ts,
+              note,
+            })),
+          );
+          // 動過持有也算「更新用戶」：bump updatedAt 讓列表排序（新→舊）反映
+          await db.users.update(user.id, { updatedAt: ts });
+        }),
+        8000,
+      );
     } catch (err) {
-      alert(`新增持有失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+      alert(
+        err instanceof Error && err.message === 'timeout'
+          ? '新增持有逾時：資料庫可能被本 app 的其他視窗/分頁鎖住。請關閉其他視窗後再試（此批可能稍後仍會寫入，請於恢復後檢查持有列表避免重複）。'
+          : `新增持有失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
+      );
       return;
     }
     selectedIds = [];
