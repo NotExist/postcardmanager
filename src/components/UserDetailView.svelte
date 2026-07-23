@@ -194,15 +194,19 @@
 
     const ts = now();
     const note = holdingNote.trim();
-    await db.holdings.bulkAdd(
-      selectedIds.map((pid) => ({
-        id: uid(),
-        userId: user.id,
-        postcardId: pid,
-        acquiredAt: ts,
-        note,
-      })),
-    );
+    await db.transaction('rw', db.holdings, db.users, async () => {
+      await db.holdings.bulkAdd(
+        selectedIds.map((pid) => ({
+          id: uid(),
+          userId: user.id,
+          postcardId: pid,
+          acquiredAt: ts,
+          note,
+        })),
+      );
+      // 動過持有也算「更新用戶」：bump updatedAt 讓列表排序（新→舊）反映
+      await db.users.update(user.id, { updatedAt: ts });
+    });
     selectedIds = [];
     holdingNote = '';
     batchDupWarning = [];
@@ -215,7 +219,10 @@
 
   async function removeHolding(id: string) {
     if (!confirm('刪除此持有關聯？')) return;
-    await db.holdings.delete(id);
+    await db.transaction('rw', db.holdings, db.users, async () => {
+      await db.holdings.delete(id);
+      await db.users.update(userId, { updatedAt: now() });
+    });
   }
 </script>
 
