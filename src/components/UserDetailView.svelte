@@ -75,11 +75,17 @@
       }
     }
 
-    await db.users.update(user.id, {
-      displayName: trimmed,
-      note: editNote.trim(),
-      updatedAt: now(),
-    });
+    try {
+      await db.users.update(user.id, {
+        displayName: trimmed,
+        note: editNote.trim(),
+        updatedAt: now(),
+      });
+    } catch (err) {
+      // 寫入失敗不能靜默（IndexedDB 故障/配額時 user 會以為「按了沒反應」）
+      alert(`儲存失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+      return;
+    }
     editing = false;
     userDupWarning = [];
   }
@@ -194,19 +200,24 @@
 
     const ts = now();
     const note = holdingNote.trim();
-    await db.transaction('rw', db.holdings, db.users, async () => {
-      await db.holdings.bulkAdd(
-        selectedIds.map((pid) => ({
-          id: uid(),
-          userId: user.id,
-          postcardId: pid,
-          acquiredAt: ts,
-          note,
-        })),
-      );
-      // 動過持有也算「更新用戶」：bump updatedAt 讓列表排序（新→舊）反映
-      await db.users.update(user.id, { updatedAt: ts });
-    });
+    try {
+      await db.transaction('rw', db.holdings, db.users, async () => {
+        await db.holdings.bulkAdd(
+          selectedIds.map((pid) => ({
+            id: uid(),
+            userId: user.id,
+            postcardId: pid,
+            acquiredAt: ts,
+            note,
+          })),
+        );
+        // 動過持有也算「更新用戶」：bump updatedAt 讓列表排序（新→舊）反映
+        await db.users.update(user.id, { updatedAt: ts });
+      });
+    } catch (err) {
+      alert(`新增持有失敗：${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+      return;
+    }
     selectedIds = [];
     holdingNote = '';
     batchDupWarning = [];

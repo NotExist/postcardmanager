@@ -1,7 +1,50 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { exportAll, downloadJSON, parseBundleFile, importBundle, type ImportMode } from '../lib/io';
   import { users, postcards, holdings } from '../lib/stores';
+  import { db } from '../lib/db';
   import { buildInfo, commitUrl } from '../lib/buildInfo';
+
+  // 直接對 DB count()（不走 liveQuery/index）：把「DB 打不開」和「DB 是空的」區分開。
+  // liveQuery store 出錯時會永遠停在 []，畫面上與空資料無法分辨——這裡是診斷的事實來源。
+  let counts: { users: number; postcards: number; holdings: number } | null = $state(null);
+  let countsError = $state('');
+  let persisted: boolean | null = $state(null);
+  let storageInfo = $state('');
+
+  async function refreshCounts() {
+    try {
+      countsError = '';
+      const [u, p, h] = await Promise.all([db.users.count(), db.postcards.count(), db.holdings.count()]);
+      counts = { users: u, postcards: p, holdings: h };
+    } catch (err) {
+      counts = null;
+      countsError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    }
+    try {
+      if (navigator.storage?.persisted) persisted = await navigator.storage.persisted();
+      if (navigator.storage?.estimate) {
+        const est = await navigator.storage.estimate();
+        if (est.usage != null && est.quota != null) {
+          storageInfo = `${(est.usage / 1024 / 1024).toFixed(1)} MB / ${(est.quota / 1024 / 1024).toFixed(0)} MB`;
+        }
+      }
+    } catch {
+      // storage estimate 非關鍵，失敗就不顯示
+    }
+  }
+
+  async function requestPersist() {
+    try {
+      persisted = await navigator.storage.persist();
+      if (persisted) showNotice('success', '持久儲存已啟用，瀏覽器空間壓力下不會回收本站資料');
+      else showNotice('error', '瀏覽器拒絕了持久儲存請求（安裝為 PWA 後通常會自動允許，可再試）');
+    } catch (err) {
+      showNotice('error', `持久儲存請求失敗：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  onMount(refreshCounts);
 
   const builtAtLocal = (() => {
     try { return new Date(buildInfo.builtAt).toLocaleString(); }
@@ -46,6 +89,7 @@
       }
       const result = await importBundle(bundle, importMode);
       showNotice('success', `匯入完成：${result.users} users / ${result.postcards} postcards / ${result.holdings} holdings${fixed > 0 ? `（已補齊 ${fixed} 筆缺漏欄位）` : ''}`);
+      refreshCounts();
     } catch (err) {
       showNotice('error', `匯入失敗：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -60,10 +104,23 @@
   <div class="card">
     <h3>資料統計</h3>
     <ul>
-      <li>用戶：{$users.length}</li>
-      <li>明信片：{$postcards.length}</li>
-      <li>持有關聯：{$holdings.length}</li>
+      <li>用戶：{$users.length}（庫內實測 {counts ? counts.users : '—'}）</li>
+      <li>明信片：{$postcards.length}（庫內實測 {counts ? counts.postcards : '—'}）</li>
+      <li>持有關聯：{$holdings.length}（庫內實測 {counts ? counts.holdings : '—'}）</li>
     </ul>
+    {#if countsError}
+      <p class="count-error">⚠️ 資料庫讀取失敗：{countsError}</p>
+    {/if}
+    <div class="stats-meta">
+      <button type="button" onclick={refreshCounts}>重新計數</button>
+      <span>
+        持久儲存：{persisted === null ? '未知' : persisted ? '已啟用' : '未啟用'}
+        {#if persisted === false}
+          <button type="button" onclick={requestPersist}>啟用</button>
+        {/if}
+      </span>
+      {#if storageInfo}<span>用量 {storageInfo}</span>{/if}
+    </div>
   </div>
 
   <div class="card">
@@ -133,6 +190,24 @@
     line-height: 1;
     padding: 0.25rem 0.5rem;
     cursor: pointer;
+  }
+
+  .count-error {
+    color: #c62828;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+  .stats-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .stats-meta button {
+    padding: 0.25rem 0.625rem;
+    font-size: 0.85rem;
   }
 
   .kv {
