@@ -9,13 +9,27 @@
   })();
 
   let importMode: ImportMode = $state('merge');
-  let status = $state('');
   let fileInput: HTMLInputElement;
+
+  // 置頂通知列：成功 4 秒自動消失，錯誤留著等手動關閉
+  let notice: { kind: 'success' | 'error'; text: string } | null = $state(null);
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function showNotice(kind: 'success' | 'error', text: string) {
+    clearTimeout(noticeTimer);
+    notice = { kind, text };
+    if (kind === 'success') noticeTimer = setTimeout(() => (notice = null), 4000);
+  }
+
+  function dismissNotice() {
+    clearTimeout(noticeTimer);
+    notice = null;
+  }
 
   async function doExport() {
     const bundle = await exportAll();
     downloadJSON(bundle);
-    status = `已匯出：${bundle.users.length} users / ${bundle.postcards.length} postcards / ${bundle.holdings.length} holdings`;
+    showNotice('success', `已匯出：${bundle.users.length} users / ${bundle.postcards.length} postcards / ${bundle.holdings.length} holdings`);
   }
 
   async function doImport(e: Event) {
@@ -23,16 +37,17 @@
     const file = target.files?.[0];
     if (!file) return;
     try {
-      const bundle = await parseBundleFile(file);
+      const { bundle, fixed } = await parseBundleFile(file);
       const verb = importMode === 'replace' ? '取代' : '合併';
-      if (!confirm(`將以 [${verb}] 方式匯入 ${bundle.users.length} users / ${bundle.postcards.length} postcards / ${bundle.holdings.length} holdings，確定？`)) {
+      const fixNote = fixed > 0 ? `\n（其中 ${fixed} 筆紀錄有缺漏欄位，將自動補齊）` : '';
+      if (!confirm(`將以 [${verb}] 方式匯入 ${bundle.users.length} users / ${bundle.postcards.length} postcards / ${bundle.holdings.length} holdings，確定？${fixNote}`)) {
         target.value = '';
         return;
       }
       const result = await importBundle(bundle, importMode);
-      status = `匯入完成：${result.users} users / ${result.postcards} postcards / ${result.holdings} holdings`;
+      showNotice('success', `匯入完成：${result.users} users / ${result.postcards} postcards / ${result.holdings} holdings${fixed > 0 ? `（已補齊 ${fixed} 筆缺漏欄位）` : ''}`);
     } catch (err) {
-      status = `匯入失敗：${err instanceof Error ? err.message : String(err)}`;
+      showNotice('error', `匯入失敗：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       target.value = '';
     }
@@ -67,8 +82,11 @@
     <input type="file" accept="application/json,.json" bind:this={fileInput} onchange={doImport} />
   </div>
 
-  {#if status}
-    <p class="status">{status}</p>
+  {#if notice}
+    <div class="notice {notice.kind}" role="alert">
+      <span class="notice-text">{notice.text}</span>
+      <button type="button" class="notice-x" onclick={dismissNotice} aria-label="關閉">✕</button>
+    </div>
   {/if}
 
   <div class="card">
@@ -91,6 +109,32 @@
 </section>
 
 <style>
+  .notice {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    color: #fff;
+    font-size: 0.9rem;
+  }
+  .notice.success { background: #2e7d32; }
+  .notice.error { background: #c62828; }
+  .notice-text { flex: 1; white-space: pre-wrap; }
+  .notice-x {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+  }
+
   .kv {
     display: grid;
     grid-template-columns: max-content 1fr;
