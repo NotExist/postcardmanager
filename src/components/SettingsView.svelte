@@ -81,14 +81,15 @@
   let importMode: ImportMode = $state('merge');
   let fileInput: HTMLInputElement;
 
-  // 置頂通知列：成功 4 秒自動消失，錯誤留著等手動關閉
+  // 置頂通知列：成功自動消失（底部進度條同步倒數），錯誤留著等手動關閉
+  const NOTICE_MS = 4000;
   let notice: { kind: 'success' | 'error'; text: string } | null = $state(null);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   function showNotice(kind: 'success' | 'error', text: string) {
     clearTimeout(noticeTimer);
-    notice = { kind, text };
-    if (kind === 'success') noticeTimer = setTimeout(() => (notice = null), 4000);
+    notice = { kind, text }; // 每次都是新物件，{#key notice} 讓進度條動畫重頭跑
+    if (kind === 'success') noticeTimer = setTimeout(() => (notice = null), NOTICE_MS);
   }
 
   function dismissNotice() {
@@ -170,6 +171,11 @@
     <div class="notice {notice.kind}" role="alert">
       <span class="notice-text">{notice.text}</span>
       <button type="button" class="notice-x" onclick={dismissNotice} aria-label="關閉">✕</button>
+      {#if notice.kind === 'success'}
+        {#key notice}
+          <div class="notice-progress" style="animation-duration: {NOTICE_MS}ms"></div>
+        {/key}
+      {/if}
     </div>
   {/if}
 
@@ -228,6 +234,20 @@
     line-height: 1;
     padding: 0.25rem 0.5rem;
     cursor: pointer;
+  }
+  .notice-progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.7);
+    transform-origin: left;
+    animation: notice-countdown linear forwards;
+  }
+  @keyframes notice-countdown {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
   }
 
   .version-card {
