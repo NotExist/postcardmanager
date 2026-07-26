@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { postcards } from '../lib/stores';
-  import { db, uid, now } from '../lib/db';
-  import { findPostcardDuplicates } from '../lib/dupCheck';
-  import type { Postcard } from '../lib/types';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { postcards, users, holdings } from '../lib/stores';
+  import PostcardForm from './PostcardForm.svelte';
 
-  let name = $state('');
-  let latStr = $state('');
-  let lonStr = $state('');
-  let version = $state('');
-  let note = $state('');
-  let dupWarning: Postcard[] = $state([]);
-  let editing: Postcard | null = $state(null);
-  let formOpen = $state(false);
+  interface Props {
+    onOpenUser: (userId: string) => void;
+  }
+  let { onOpenUser }: Props = $props();
+
+  let formOpen = $state(false); // 頂部新增表單
+  let editingId: string | null = $state(null); // 原位編輯中的明信片 id
   let filter = $state('');
+  const expanded = new SvelteSet<string>(); // 展開持有名單的明信片 id
 
   const filtered = $derived.by(() => {
     const q = filter.trim().toLowerCase();
@@ -25,87 +24,31 @@
     );
   });
 
-  function parseCoord(s: string): number | null {
-    const t = s.trim();
-    if (!t) return null;
-    const n = Number(t);
-    return Number.isFinite(n) ? n : null;
+  // postcardId → 持有者 userId（去重，依持有紀錄順序）
+  const holdersByPostcard = $derived.by(() => {
+    const m = new Map<string, string[]>();
+    for (const h of $holdings) {
+      const list = m.get(h.postcardId);
+      if (!list) m.set(h.postcardId, [h.userId]);
+      else if (!list.includes(h.userId)) list.push(h.userId);
+    }
+    return m;
+  });
+  const userMap = $derived(new Map($users.map((u) => [u.id, u])));
+
+  function openAdd() {
+    formOpen = true;
+    editingId = null; // 同時間只留一個編輯器
   }
 
-  function reset() {
-    name = '';
-    latStr = '';
-    lonStr = '';
-    version = '';
-    note = '';
-    dupWarning = [];
-    editing = null;
+  function startEdit(id: string) {
+    editingId = id;
     formOpen = false;
   }
 
-  async function submit(force = false) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const lat = parseCoord(latStr);
-    const lon = parseCoord(lonStr);
-
-    if (editing) {
-      await db.postcards.update(editing.id, {
-        name: trimmed,
-        lat,
-        lon,
-        version: version.trim(),
-        note: note.trim(),
-        updatedAt: now(),
-      });
-      reset();
-      return;
-    }
-
-    if (!force) {
-      const hits = await findPostcardDuplicates({ name: trimmed, lat, lon });
-      if (hits.length > 0) {
-        dupWarning = hits;
-        return;
-      }
-    }
-
-    const t = now();
-    await db.postcards.add({
-      id: uid(),
-      name: trimmed,
-      lat,
-      lon,
-      version: version.trim(),
-      note: note.trim(),
-      createdAt: t,
-      updatedAt: t,
-    });
-    reset();
-  }
-
-  function startEdit(p: Postcard) {
-    editing = p;
-    name = p.name;
-    latStr = p.lat === null ? '' : String(p.lat);
-    lonStr = p.lon === null ? '' : String(p.lon);
-    version = p.version;
-    note = p.note;
-    dupWarning = [];
-    formOpen = true;
-  }
-
-  async function remove(p: Postcard) {
-    const holdingCount = await db.holdings.where('postcardId').equals(p.id).count();
-    const msg = holdingCount > 0
-      ? `刪除 "${p.name}" 會同時刪除其 ${holdingCount} 筆持有關聯，確定？`
-      : `刪除 "${p.name}"？`;
-    if (!confirm(msg)) return;
-    await db.transaction('rw', db.postcards, db.holdings, async () => {
-      await db.holdings.where('postcardId').equals(p.id).delete();
-      await db.postcards.delete(p.id);
-    });
-    if (editing?.id === p.id) reset();
+  function toggleExpanded(id: string) {
+    if (expanded.has(id)) expanded.delete(id);
+    else expanded.add(id);
   }
 </script>
 
@@ -113,54 +56,9 @@
   <h2>明信片</h2>
 
   {#if formOpen}
-    <form onsubmit={(e) => { e.preventDefault(); submit(false); }} class="card">
-      <h3>{editing ? '編輯' : '新增'}明信片</h3>
-      <label>
-        名稱 *
-        <input type="text" bind:value={name} required placeholder="例：京都鴨川夜景" />
-      </label>
-      <div class="grid-2">
-        <label>
-          經度
-          <input type="text" inputmode="decimal" bind:value={lonStr} placeholder="135.7681" />
-        </label>
-        <label>
-          緯度
-          <input type="text" inputmode="decimal" bind:value={latStr} placeholder="35.0116" />
-        </label>
-      </div>
-      <label>
-        版本
-        <input type="text" bind:value={version} placeholder="例：v1 / 2024 限定" />
-      </label>
-      <label>
-        備註
-        <textarea bind:value={note} rows="2"></textarea>
-      </label>
-
-      {#if dupWarning.length > 0}
-        <div class="warn">
-          <strong>找到 {dupWarning.length} 筆相似明信片：</strong>
-          <ul>
-            {#each dupWarning as d (d.id)}
-              <li>{d.name}{d.version ? ` [${d.version}]` : ''} {d.lat !== null && d.lon !== null ? `(${d.lon}, ${d.lat})` : ''}</li>
-            {/each}
-          </ul>
-          <p>仍要新增？</p>
-          <div class="actions">
-            <button type="button" onclick={() => submit(true)}>強制新增</button>
-            <button type="button" onclick={reset}>取消</button>
-          </div>
-        </div>
-      {:else}
-        <div class="actions">
-          <button type="submit">{editing ? '儲存' : '新增'}</button>
-          <button type="button" onclick={reset}>取消</button>
-        </div>
-      {/if}
-    </form>
+    <PostcardForm postcard={null} onDone={() => (formOpen = false)} />
   {:else}
-    <button type="button" class="add-toggle" onclick={() => (formOpen = true)}>+ 新增明信片</button>
+    <button type="button" class="add-toggle" onclick={openAdd}>+ 新增明信片</button>
   {/if}
 
   <div class="card">
@@ -173,20 +71,40 @@
 
   <div class="list">
     {#each filtered as p (p.id)}
-      <div class="row">
-        <div class="row-main">
-          <div class="row-title">{p.name}{p.version ? ` · ${p.version}` : ''}</div>
-          {#if p.lat !== null && p.lon !== null}
-            <div class="row-sub">📍 {p.lon}, {p.lat}</div>
-          {/if}
-          {#if p.note}<div class="row-sub">{p.note}</div>{/if}
-          <div class="row-meta">id: {p.id.slice(0, 8)}…</div>
+      {#if editingId === p.id}
+        <PostcardForm postcard={p} onDone={() => (editingId = null)} />
+      {:else}
+        {@const holderIds = holdersByPostcard.get(p.id) ?? []}
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title">{p.name}{p.version ? ` · ${p.version}` : ''}</div>
+            {#if p.lat !== null && p.lon !== null}
+              <div class="row-sub">📍 {p.lon}, {p.lat}</div>
+            {/if}
+            {#if p.note}<div class="row-sub">{p.note}</div>{/if}
+            <div class="row-meta">id: {p.id.slice(0, 8)}…</div>
+            {#if holderIds.length > 0}
+              <button type="button" class="holders-toggle" onclick={() => toggleExpanded(p.id)}>
+                持有用戶 {holderIds.length} 位 {expanded.has(p.id) ? '▴' : '▾'}
+              </button>
+              {#if expanded.has(p.id)}
+                <div class="holders">
+                  {#each holderIds as hid (hid)}
+                    <button type="button" class="holder-chip" onclick={() => onOpenUser(hid)}>
+                      {userMap.get(hid)?.displayName ?? '(用戶已刪除)'}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            {:else}
+              <div class="row-meta">尚無用戶持有</div>
+            {/if}
+          </div>
+          <div class="row-actions">
+            <button onclick={() => startEdit(p.id)}>編輯</button>
+          </div>
         </div>
-        <div class="row-actions">
-          <button onclick={() => startEdit(p)}>編輯</button>
-          <button class="danger" onclick={() => remove(p)}>刪除</button>
-        </div>
-      </div>
+      {/if}
     {:else}
       <p class="empty">
         {filter.trim() ? '沒有符合的明信片' : '尚無明信片'}
@@ -201,5 +119,31 @@
     padding: 0.6rem;
     margin-bottom: 1rem;
     font-size: 0.95rem;
+  }
+  .holders-toggle {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .holders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+  }
+  .holder-chip {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: 1rem;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .holder-chip:hover {
+    border-color: var(--accent);
   }
 </style>

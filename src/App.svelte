@@ -67,7 +67,12 @@
       <UsersView onOpen={(id) => (selectedUserId = id)} />
     {/if}
   {:else if tab === 'postcards'}
-    <PostcardsView />
+    <PostcardsView
+      onOpenUser={(id) => {
+        tab = 'users';
+        selectedUserId = id;
+      }}
+    />
   {:else if tab === 'settings'}
     <SettingsView />
   {/if}
