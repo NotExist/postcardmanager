@@ -1,9 +1,11 @@
 <script lang="ts">
   import { useRegisterSW } from 'virtual:pwa-register/svelte';
+  import { setRegistration } from '../lib/swCheck';
 
   const { needRefresh, offlineReady, updateServiceWorker } = useRegisterSW({
-    onRegisteredSW(swUrl) {
+    onRegisteredSW(swUrl, registration) {
       console.log('SW registered:', swUrl);
+      if (registration) setRegistration(registration);
     },
     onRegisterError(err) {
       console.error('SW registration error', err);

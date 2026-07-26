@@ -4,6 +4,7 @@
   import { users, postcards, holdings } from '../lib/stores';
   import { db, withTimeout } from '../lib/db';
   import { buildInfo, commitUrl } from '../lib/buildInfo';
+  import { checkForUpdate } from '../lib/swCheck';
 
   // 直接對 DB count()（不走 liveQuery/index）：把「DB 打不開/被鎖」和「DB 是空的」區分開。
   // liveQuery store 出錯時會永遠停在 []，畫面上與空資料無法分辨——這裡是診斷的事實來源。
@@ -58,10 +59,24 @@
 
   onMount(refreshCounts);
 
-  const builtAtLocal = (() => {
-    try { return new Date(buildInfo.builtAt).toLocaleString(); }
-    catch { return buildInfo.builtAt; }
-  })();
+  let checkingUpdate = $state(false);
+
+  async function checkUpdate(e?: Event) {
+    // 點到 commit 連結時不觸發檢查
+    if (e?.target instanceof HTMLElement && e.target.closest('a')) return;
+    if (checkingUpdate) return;
+    checkingUpdate = true;
+    try {
+      const r = await checkForUpdate();
+      if (r === 'update-found') showNotice('success', '發現新版本！下方會出現更新提示，按「更新」即可套用');
+      else if (r === 'up-to-date') showNotice('success', '已是最新版本');
+      else showNotice('error', 'Service Worker 尚未註冊，無法檢查（開發模式或註冊失敗）');
+    } catch (err) {
+      showNotice('error', `檢查更新失敗：${err instanceof Error ? err.message : String(err)}（可能是離線）`);
+    } finally {
+      checkingUpdate = false;
+    }
+  }
 
   let importMode: ImportMode = $state('merge');
   let fileInput: HTMLInputElement;
@@ -158,7 +173,18 @@
     </div>
   {/if}
 
-  <div class="card">
+  <div
+    class="card version-card"
+    role="button"
+    tabindex="0"
+    onclick={checkUpdate}
+    onkeydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        checkUpdate(e);
+      }
+    }}
+  >
     <h3>版本資訊</h3>
     <dl class="kv">
       <dt>version</dt>
@@ -172,8 +198,9 @@
         {/if}
       </dd>
       <dt>built</dt>
-      <dd>{builtAtLocal}</dd>
+      <dd><code>{buildInfo.builtAt}</code></dd>
     </dl>
+    <div class="row-meta">{checkingUpdate ? '檢查更新中…' : '點擊此區塊檢查更新'}</div>
   </div>
 </section>
 
@@ -202,6 +229,13 @@
     line-height: 1;
     padding: 0.25rem 0.5rem;
     cursor: pointer;
+  }
+
+  .version-card {
+    cursor: pointer;
+  }
+  .version-card:hover {
+    border-color: var(--accent);
   }
 
   .count-error {
