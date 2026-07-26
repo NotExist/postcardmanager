@@ -45,8 +45,17 @@
   ];
 
   function switchTab(t: Tab) {
+    // 點擊「當前已在的分頁」= 回頂（行動 app 慣例）；切換分頁/關閉詳情則即時回頂
+    const samePage = t === tab && !selectedUserId;
     tab = t;
     selectedUserId = null;
+    window.scrollTo({ top: 0, behavior: samePage ? 'smooth' : 'auto' });
+  }
+
+  function openUser(id: string) {
+    tab = 'users';
+    selectedUserId = id;
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }
 </script>
 
@@ -64,15 +73,10 @@
     {#if selectedUserId}
       <UserDetailView userId={selectedUserId} onBack={() => (selectedUserId = null)} />
     {:else}
-      <UsersView onOpen={(id) => (selectedUserId = id)} />
+      <UsersView onOpen={openUser} />
     {/if}
   {:else if tab === 'postcards'}
-    <PostcardsView
-      onOpenUser={(id) => {
-        tab = 'users';
-        selectedUserId = id;
-      }}
-    />
+    <PostcardsView onOpenUser={openUser} />
   {:else if tab === 'settings'}
     <SettingsView />
   {/if}
