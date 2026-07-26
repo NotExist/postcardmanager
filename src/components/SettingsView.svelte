@@ -5,6 +5,7 @@
   import { db, withTimeout } from '../lib/db';
   import { buildInfo, commitUrl } from '../lib/buildInfo';
   import { checkForUpdate } from '../lib/swCheck';
+  import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
 
   // 直接對 DB count()（不走 liveQuery/index）：把「DB 打不開/被鎖」和「DB 是空的」區分開。
   // liveQuery store 出錯時會永遠停在 []，畫面上與空資料無法分辨——這裡是診斷的事實來源。
@@ -78,6 +79,8 @@
     }
   }
 
+  let themePref: ThemePref = $state(getThemePref());
+
   let importMode: ImportMode = $state('merge');
   let fileInput: HTMLInputElement;
 
@@ -149,6 +152,16 @@
       </span>
       {#if storageInfo}<span>用量 {storageInfo}</span>{/if}
     </div>
+  </div>
+
+  <div class="card">
+    <h3>外觀</h3>
+    <fieldset>
+      <legend>主題</legend>
+      <label><input type="radio" bind:group={themePref} value="system" onchange={() => setThemePref(themePref)} /> 跟隨系統</label>
+      <label><input type="radio" bind:group={themePref} value="light" onchange={() => setThemePref(themePref)} /> 淺色</label>
+      <label><input type="radio" bind:group={themePref} value="dark" onchange={() => setThemePref(themePref)} /> 深色</label>
+    </fieldset>
   </div>
 
   <div class="card">

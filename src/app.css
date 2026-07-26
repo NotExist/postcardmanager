@@ -26,6 +26,35 @@
   }
 }
 
+/* 手動覆寫（設定頁選淺色/深色時設 <html data-theme>）：
+   屬性選擇器特異度高於 :root，不論系統偏好一律以此為準。
+   調色時三處（:root、media dark、下方兩塊）要同步。 */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f7f7f8;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --card: #fff;
+  --border: #e2e2e6;
+  --accent: #2563eb;
+  --warn-bg: #fff4d6;
+  --warn-border: #f1c40f;
+  --danger: #c0392b;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #15161a;
+  --fg: #ececec;
+  --muted: #999;
+  --card: #1f2125;
+  --border: #2c2e34;
+  --accent: #60a5fa;
+  --warn-bg: #3a2e10;
+  --warn-border: #b08700;
+  --danger: #ef6b5e;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
