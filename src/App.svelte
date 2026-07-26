@@ -5,6 +5,7 @@
   import PostcardsView from './components/PostcardsView.svelte';
   import SettingsView from './components/SettingsView.svelte';
   import UpdatePrompt from './components/UpdatePrompt.svelte';
+  import Counter from './components/Counter.svelte';
 
   type Tab = 'users' | 'postcards' | 'settings';
   let tab: Tab = $state('users');
@@ -50,12 +51,12 @@
 </script>
 
 <header>
-  <h1>postcardmemo</h1>
   <nav>
     {#each tabs as t (t.id)}
       <button class:active={tab === t.id} onclick={() => switchTab(t.id)}>{t.label}</button>
     {/each}
   </nav>
+  <Counter />
 </header>
 
 <main>
