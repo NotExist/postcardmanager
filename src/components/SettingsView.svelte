@@ -200,7 +200,6 @@
       <dt>built</dt>
       <dd><code>{buildInfo.builtAt}</code></dd>
     </dl>
-    <div class="row-meta">{checkingUpdate ? '檢查更新中…' : '點擊此區塊檢查更新'}</div>
   </div>
 </section>
 
