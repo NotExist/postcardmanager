@@ -28,24 +28,40 @@
 
   // IME 守則（39aa1b7 教訓）：組字過程中絕不動 inputValue，否則打斷中日文輸入。
   // 唯一允許清 inputValue 的時機是「exact match 成功 commit、且不在組字中」。
-  // compositionstart→end 之間一律不 commit；compositionend 時再補一次檢查
-  // （Chrome 的 input event 先於 compositionend，effect 可能在 composing=true 時被跳過）。
-  function tryCommit(value: string) {
+  //
+  // commit 訊號（刻意「不」在每個 keystroke / compositionend 做 exact match 自動選入：
+  // 名稱互為前綴時——如「臺灣」與「臺灣島」——會在打到前綴的瞬間被搶先選走，
+  // 較長的目標永遠選不到）：
+  //   1. 輸入含空白（含行動版貼上如實落入的情境；先試 exact match 保護
+  //      含空白的 display「名稱 · 版本」，不中才走批次比對）
+  //   2. Enter
+  //   3. 從 datalist 候選點選（原生 change 事件；桌機下拉與行動版鍵盤 chip 都會發，
+  //      blur 時若輸入恰為 exact match 也順帶 commit）
+  //   4. 「比對加入」按鈕
+  function tryCommit(value: string): boolean {
     const id = displayToId.get(value.trim());
-    if (id) {
-      onPick(id);
-      inputValue = '';
-    }
+    if (!id) return false;
+    onPick(id);
+    inputValue = '';
+    return true;
   }
 
   $effect(() => {
     if (composing) return;
-    tryCommit(inputValue);
-    // 遇到空白即觸發批次比對（行動版貼上未必觸發 paste 事件，文字如實落入時
-    // 在結尾補一個空白即可觸發；先跑 tryCommit 保護含空白的 display「名稱 · 版本」）。
-    // 注意：組字中不觸發（上方 return）；中文 IME 的空白選字不會落到已 commit 的 value。
-    if (inputValue && /\s/.test(inputValue)) commitBatch();
+    if (inputValue && /\s/.test(inputValue)) {
+      if (!tryCommit(inputValue)) commitBatch();
+    }
   });
+
+  function handleChange() {
+    if (!composing) tryCommit(inputValue);
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Enter' || e.isComposing || composing) return;
+    e.preventDefault();
+    if (!tryCommit(inputValue)) commitBatch();
+  }
 
   function handlePaste(e: ClipboardEvent) {
     const text = e.clipboardData?.getData('text') ?? '';
@@ -80,8 +96,9 @@
       oncompositionend={(e) => {
         composing = false;
         inputValue = e.currentTarget.value;
-        tryCommit(inputValue);
       }}
+      onchange={handleChange}
+      onkeydown={handleKeydown}
       onpaste={handlePaste}
     />
   </label>
@@ -93,7 +110,7 @@
   {#if inputValue.trim()}
     <div class="batch-row">
       <button type="button" onclick={commitBatch}>比對加入</button>
-      <span class="row-meta">把目前輸入整批比對（輸入含空白時會自動觸發）</span>
+      <span class="row-meta">把目前輸入整批比對（空白或 Enter 也會觸發）</span>
     </div>
   {/if}
   <div class="row-meta">
