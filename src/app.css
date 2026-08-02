@@ -128,7 +128,7 @@ label {
   margin-bottom: 0.5rem;
 }
 
-input[type="text"], input[type="number"], textarea, select {
+input[type="text"], input[type="number"], input[type="search"], textarea, select {
   display: block;
   width: 100%;
   padding: 0.5rem;
@@ -142,6 +142,12 @@ input[type="text"], input[type="number"], textarea, select {
 }
 
 textarea { resize: vertical; }
+
+/* 過濾框行動版加大觸控目標；16px 字級避免 iOS 聚焦自動縮放 */
+input[type="search"] {
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+}
 
 .grid-2 {
   display: grid;

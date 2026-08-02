@@ -14,7 +14,10 @@
 
   const user = $derived($users.find((u) => u.id === userId) ?? null);
   const postcardMap = $derived(new Map($postcards.map((p) => [p.id, p])));
-  const userHoldings = $derived($holdings.filter((h) => h.userId === userId));
+  // 持有列表依建立時間倒序（上新下舊）
+  const userHoldings = $derived(
+    $holdings.filter((h) => h.userId === userId).sort((a, b) => b.acquiredAt - a.acquiredAt),
+  );
   const heldPostcardIds = $derived(new Set(userHoldings.map((h) => h.postcardId)));
 
   let editing = $state(false);
@@ -24,7 +27,6 @@
 
   // 新增持有：多選累積 → 一次寫入
   let selectedIds: string[] = $state([]);
-  let holdingNote = $state('');
   let batchDupWarning: { postcard: Postcard; hits: HoldingDupHit[] }[] = $state([]);
   let pasteInfo = $state('');
 
@@ -206,7 +208,8 @@
     }
 
     const ts = now();
-    const note = holdingNote.trim();
+    // 批次備註欄位 UI 暫時隱藏（2026-08-02 user 要求）；DB 欄位保留，寫入空字串
+    const note = '';
     try {
       await withTimeout(
         db.transaction('rw', db.holdings, db.users, async () => {
@@ -233,7 +236,6 @@
       return;
     }
     selectedIds = [];
-    holdingNote = '';
     batchDupWarning = [];
     pasteInfo = '';
   }
@@ -359,11 +361,6 @@
             </span>
           {/each}
         </div>
-
-        <label>
-          備註（套用到本批全部）
-          <input type="text" bind:value={holdingNote} placeholder="例：2024 京都旅行" />
-        </label>
 
         {#if batchDupWarning.length > 0}
           <div class="warn">
